@@ -1,0 +1,98 @@
+"""
+This security layer inadequately handles A/B storage for files in RepyV2.
+
+
+
+Note:
+    For ref: https://github.com/SeattleTestbed/docs/blob/master/EducationalAssignments/ABStoragePartOne.md
+    This security layer uses encasementlib.r2py, restrictions.default, repy.py and Python
+    Also you need to give it an application to run.
+    python repy.py restrictions.default encasementlib.r2py [security_layer].r2py [attack_program].r2py 
+    py -2 for win10
+    
+    """ 
+TYPE="type"
+ARGS="args"
+RETURN="return"
+EXCP="exceptions"
+TARGET="target"
+FUNC="func"
+OBJC="objc"
+
+class ABFile():
+  def __init__(self,filename,create):
+    # globals
+    mycontext['debug'] = False   
+    # local (per object) reference to the underlying file
+    self.filename1 = filename.lower() #convert input filename to lower case
+    self.Afn = self.filename1+'.a'
+    self.Bfn = self.filename1+'.b'
+    self.fileclosed = 0 #file status flag
+
+    # make the files and add 'SE' to the files...
+    try:
+      self.Afile = openfile(self.Afn,create)
+      self.Bfile = openfile(self.Bfn,create)
+      self.fileclosed = 0
+    
+      if len(self.Afile.readat(None,0)) == 0 and len(self.Bfile.readat(None,0)) == 0: #update empty files while creation
+        self.Afile.writeat('SE',0)
+        self.Bfile.writeat('SE',0)
+
+    except:
+      pass
+
+  def writeat(self,data,offset):
+    # Write the requested data to the B file using the sandbox's writeat call
+    if (self.Bfn in listfiles() and self.fileclosed == 0):
+      try:
+        self.Bfile.writeat(data,offset)
+      except:
+        pass
+
+  
+  def readat(self,bytes,offset):
+    # Read from the A file using the sandbox's readat...
+    if (self.Afn in listfiles() and self.fileclosed == 0):
+      try:
+        return self.Afile.readat(bytes,offset)
+      except:
+        return ''
+    else:
+      return ''
+
+  def close(self):
+
+    if(self.Afn in listfiles() and self.Bfn in listfiles()): #check file availability
+      if(self.fileclosed == 0): #check file status
+        try:
+          self.Bfiletext = self.Bfile.readat(None,0)
+          if self.Bfiletext[0] == 'S' and self.Bfiletext[-1] == 'E':
+            self.Afile.writeat(self.Bfiletext,0)
+    
+          self.Afile.close()
+          self.Bfile.close()
+          self.fileclosed = 1 #update file status
+        except:
+          pass
+
+
+def ABopenfile(filename, create):
+  return ABFile(filename,create)
+
+
+
+
+# The code here sets up type checking and variable hiding for you.  You
+# should not need to change anything below here.
+sec_file_def = {"obj-type":ABFile,
+                "name":"ABFile",
+                "writeat":{"type":"func","args":(str,(int,long)),"exceptions":Exception,"return":(int,type(None)),"target":ABFile.writeat},
+                "readat":{"type":"func","args":((int,long,type(None)),(int,long)),"exceptions":Exception,"return":str,"target":ABFile.readat},
+                "close":{"type":"func","args":None,"exceptions":Exception,"return":(bool,type(None)),"target":ABFile.close}
+           }
+
+CHILD_CONTEXT_DEF["ABopenfile"] = {TYPE:OBJC,ARGS:(str,bool),EXCP:Exception,RETURN:sec_file_def,TARGET:ABopenfile}
+
+# Execute the user code
+secure_dispatch_module()
